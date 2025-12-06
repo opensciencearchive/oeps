@@ -205,17 +205,20 @@ try {
       <!-- Review Panel -->
       <div class="tab-panel" id="review" role="tabpanel">
         {openPRs.length > 0 ? (
-          <ul class="oep-list">
-            {openPRs.map((pr) => (
-              <li>
-                <a href={`/preview/${pr.number}`} class="oep-row">
-                  <span class="oep-num">{String(pr.oep).padStart(4, '0')}</span>
-                  <span class="oep-title">{pr.title}</span>
-                  <span class={`oep-type oep-type--${pr.type.toLowerCase()}`}>{pr.type}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
+          <>
+            <p class="review-prompt">These proposals are open for community feedback. Please join the discussion on GitHub.</p>
+            <ul class="oep-list">
+              {openPRs.map((pr) => (
+                <li>
+                  <a href={`/preview/${pr.number}`} class="oep-row">
+                    <span class="oep-num">{String(pr.oep).padStart(4, '0')}</span>
+                    <span class="oep-title">{pr.title}</span>
+                    <span class={`oep-type oep-type--${pr.type.toLowerCase()}`}>{pr.type}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </>
         ) : (
           <p class="empty-state">No proposals under review. <a href="https://github.com/opensciencearchive/oeps/pulls/new" target="_blank" rel="noopener">Submit one here →</a></p>
         )}
@@ -475,6 +478,12 @@ try {
   .oep-type--process {
     background: hsl(160, 30%, 93%);
     color: hsl(160, 35%, 35%);
+  }
+
+  .review-prompt {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-4);
   }
 
   .empty-state {
