@@ -1,0 +1,52 @@
+---
+
+---
+
+<footer class="footer">
+  <div class="footer-inner">
+    <p class="copyright">
+      Open Science Archive
+    </p>
+    <nav class="footer-nav">
+      <a href="https://opensciencearchive.org" class="footer-link">About OSA</a>
+      <a href="https://github.com/opensciencearchive/oeps" class="footer-link">Contribute</a>
+    </nav>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    padding: var(--space-12) var(--space-6);
+    border-top: 1px solid var(--color-border);
+    margin-top: var(--space-20);
+  }
+
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .copyright {
+    font-size: var(--text-sm);
+    color: var(--color-text-subtle);
+  }
+
+  .footer-nav {
+    display: flex;
+    gap: var(--space-6);
+  }
+
+  .footer-link {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .footer-link:hover {
+    color: var(--color-accent);
+  }
+</style>

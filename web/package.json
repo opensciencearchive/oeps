@@ -1,0 +1,23 @@
+{
+  "name": "oeps",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "OEP_ENV=dev astro dev",
+    "dev:prod": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/react": "^4.4.2",
+    "@astrojs/vercel": "^9.0.2",
+    "@octokit/rest": "^22.0.1",
+    "@opensciencearchive/ui": "github:opensciencearchive/ui",
+    "astro": "^5.16.4",
+    "date-fns": "^4.1.0",
+    "marked": "^17.0.1",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  }
+}

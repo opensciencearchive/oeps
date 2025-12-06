@@ -1,0 +1,440 @@
+---
+// Prerender at build time (SSG)
+export const prerender = true;
+
+import { getCollection } from 'astro:content';
+import { marked } from 'marked';
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import StatusBadge from '../../components/StatusBadge.astro';
+
+// Helper to generate slug from heading text
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-');
+}
+
+// Configure marked to add IDs to headings
+const renderer = new marked.Renderer();
+renderer.heading = ({ text, depth }) => {
+  const slug = slugify(text);
+  return `<h${depth} id="${slug}">${text}</h${depth}>`;
+};
+marked.use({ renderer });
+
+export async function getStaticPaths() {
+  const oeps = await getCollection('oeps');
+  return oeps.map((oep) => ({
+    params: { slug: oep.id },
+    props: { oep },
+  }));
+}
+
+const { oep } = Astro.props;
+
+// Render markdown body to HTML (body is in data for Astro 5.x content collections)
+const htmlContent = await marked(oep.data.body || '');
+
+// Extract headings for table of contents, grouping h3s under their parent h2
+type TocItem = { level: number; text: string; slug: string; children?: TocItem[] };
+const tocItems: TocItem[] = [];
+const headingRegex = /^(#{2,3})\s+(.+)$/gm;
+let match;
+let currentH2: TocItem | null = null;
+
+while ((match = headingRegex.exec(oep.data.body || '')) !== null) {
+  const level = match[1].length;
+  const text = match[2];
+  const slug = slugify(text);
+
+  if (level === 2) {
+    currentH2 = { level, text, slug, children: [] };
+    tocItems.push(currentH2);
+  } else if (level === 3 && currentH2) {
+    currentH2.children!.push({ level, text, slug });
+  }
+}
+
+// Split authors on comma and trim whitespace
+const authors = oep.data.author.split(',').map((a: string) => a.trim());
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+---
+
+<Layout title={`OEP-${String(oep.data.oep).padStart(4, '0')}: ${oep.data.title}`}>
+  <Header />
+
+  <div class="page-container">
+    <article class="article">
+      <header class="article-header">
+        <div class="article-meta">
+          <span class="oep-number">OEP-{String(oep.data.oep).padStart(4, '0')}</span>
+          <StatusBadge status={oep.data.status} />
+        </div>
+        <h1 class="article-title">{oep.data.title}</h1>
+
+        <dl class="article-details">
+          <div class="detail-row">
+            <dt>Type</dt>
+            <dd>{oep.data.type}</dd>
+          </div>
+          <div class="detail-row">
+            <dt>Created</dt>
+            <dd>{formatDate(oep.data.created)}</dd>
+          </div>
+          <div class="detail-row detail-row-authors">
+            <dt>{authors.length > 1 ? 'Authors' : 'Author'}</dt>
+            <dd class="authors-list">
+              {authors.map((author) => (
+                <span class="author-entry">{author}</span>
+              ))}
+            </dd>
+          </div>
+        </dl>
+      </header>
+
+      <!-- Mobile TOC (shown above body on small screens) -->
+      <nav class="toc-mobile">
+        <div class="toc-mobile-header">Contents</div>
+        <ul class="toc-list">
+          {tocItems.map((item) => (
+            <li class="toc-section">
+              <a href={`#${item.slug}`} class="toc-link">
+                <span class="toc-chevron">›</span>
+                {item.text}
+              </a>
+              {item.children && item.children.length > 0 && (
+                <ul class="toc-children">
+                  {item.children.map((child) => (
+                    <li>
+                      <a href={`#${child.slug}`} class="toc-child-link">{child.text}</a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <div class="content-with-toc">
+        <aside class="toc">
+          <nav class="toc-nav">
+            <ul class="toc-list">
+              {tocItems.map((item) => (
+                <li class="toc-section">
+                  <a href={`#${item.slug}`} class="toc-link">
+                    <span class="toc-chevron">›</span>
+                    {item.text}
+                  </a>
+                  {item.children && item.children.length > 0 && (
+                    <ul class="toc-children">
+                      {item.children.map((child) => (
+                        <li>
+                          <a href={`#${child.slug}`} class="toc-child-link">{child.text}</a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </aside>
+
+        <div class="prose" set:html={htmlContent} />
+      </div>
+    </article>
+  </div>
+
+  <Footer />
+</Layout>
+
+<style>
+  /* ═══════════════════════════════════════════════════════════
+     BASE STYLES (Mobile-first)
+     ═══════════════════════════════════════════════════════════ */
+  .page-container {
+    max-width: 100vw;
+    box-sizing: border-box;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  .article {
+    padding: var(--space-8) 0 var(--space-16);
+  }
+
+  .article-header {
+    margin-bottom: var(--space-6);
+    padding-bottom: var(--space-6);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .article-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+
+  .oep-number {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+
+  .article-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.75rem, 8vw, 2.5rem);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: var(--leading-tight);
+    margin-bottom: var(--space-8);
+  }
+
+  /* Metadata - stacked on mobile */
+  .article-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+  }
+
+  .detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .detail-row dt {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-subtle);
+  }
+
+  .detail-row dd {
+    margin: 0;
+    font-size: var(--text-base);
+    color: var(--color-text);
+  }
+
+  .authors-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  /* Content grid - single column on mobile */
+  .content-with-toc {
+    display: block;
+  }
+
+  /* Desktop TOC - hidden on mobile */
+  .toc {
+    display: none;
+  }
+
+  /* Mobile TOC */
+  .toc-mobile {
+    margin-top: var(--space-8);
+    margin-bottom: var(--space-8);
+    padding-bottom: var(--space-8);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .toc-mobile-header {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-subtle);
+    margin-bottom: var(--space-4);
+  }
+
+  .toc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .toc-section {
+    margin-bottom: var(--space-1);
+  }
+
+  .toc-link {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    font-size: var(--text-base);
+    color: var(--color-text-muted);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .toc-link:hover {
+    color: var(--color-text);
+  }
+
+  .toc-chevron {
+    color: var(--color-text-subtle);
+    font-size: 14px;
+    line-height: 1.5;
+    flex-shrink: 0;
+  }
+
+  .toc-children {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--space-2) calc(var(--space-2) + 14px);
+  }
+
+  .toc-child-link {
+    display: block;
+    padding: var(--space-1) 0;
+    font-size: var(--text-sm);
+    color: var(--color-text-subtle);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .toc-child-link:hover {
+    color: var(--color-text);
+  }
+
+  .prose {
+    max-width: 100%;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     TABLET (≥768px)
+     ═══════════════════════════════════════════════════════════ */
+  @media (min-width: 768px) {
+    .page-container {
+      padding: 0 var(--space-8);
+    }
+
+    .article {
+      padding: var(--space-10) 0 var(--space-20);
+    }
+
+    .article-title {
+      font-size: var(--text-4xl);
+    }
+
+    .article-details {
+      flex-direction: row;
+      gap: var(--space-12);
+    }
+
+    .detail-row dd {
+      font-size: var(--text-sm);
+    }
+
+    .toc-mobile {
+      margin-top: var(--space-12);
+      margin-bottom: var(--space-12);
+    }
+
+    .toc-link {
+      font-size: var(--text-sm);
+    }
+
+    .toc-chevron {
+      font-size: 12px;
+    }
+
+    .toc-child-link {
+      font-size: 13px;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     DESKTOP (≥1024px) - Show sidebar TOC
+     ═══════════════════════════════════════════════════════════ */
+  @media (min-width: 1024px) {
+    .page-container {
+      max-width: 1100px;
+    }
+
+    .article {
+      padding: var(--space-12) 0;
+    }
+
+    .article-header {
+      max-width: 720px;
+      margin-left: calc(180px + var(--space-10));
+      padding-bottom: var(--space-8);
+      margin-bottom: var(--space-8);
+      border-bottom: none;
+    }
+
+    .article-details {
+      padding: var(--space-6) 0;
+      border-top: 1px solid var(--color-border);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    /* Hide mobile TOC, show desktop sidebar */
+    .toc-mobile {
+      display: none;
+    }
+
+    .toc {
+      display: block;
+      position: relative;
+    }
+
+    .toc-nav {
+      position: sticky;
+      top: var(--space-8);
+    }
+
+    .content-with-toc {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: var(--space-10);
+    }
+
+    .prose {
+      max-width: 720px;
+    }
+  }
+</style>
+
+<style is:global>
+  /* Remove large top margin from first h2 in prose */
+  .prose h2:first-of-type {
+    margin-top: 0;
+  }
+
+  /* Mobile: edge-to-edge code blocks and tables */
+  @media (max-width: 640px) {
+    .prose pre {
+      margin-left: -20px;
+      margin-right: -20px;
+      padding-left: 20px;
+      padding-right: 20px;
+      border-radius: 0;
+    }
+
+    .prose table {
+      display: block;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+</style>

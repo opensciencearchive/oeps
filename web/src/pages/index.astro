@@ -1,0 +1,508 @@
+---
+// Prerender at build time (SSG)
+export const prerender = true;
+
+import { getCollection } from 'astro:content';
+import { Octokit } from '@octokit/rest';
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import StatusBadge from '../components/StatusBadge.astro';
+
+const oeps = await getCollection('oeps');
+const sortedOeps = oeps.sort((a, b) => a.data.oep - b.data.oep);
+
+// Categorize
+const acceptedOeps = sortedOeps.filter(
+  (oep) => oep.data.status === 'Accepted' || oep.data.status === 'Living'
+);
+
+import { DUMMY_PRS } from '../content/dummy-oeps';
+
+const octokit = new Octokit({
+  auth: import.meta.env.GITHUB_TOKEN,
+});
+
+// Type for PR OEP data (parsed from PR content)
+type PROep = {
+  number: number;
+  oep: number;
+  title: string;
+  type: string;
+  author: string;
+  status: string;
+};
+
+let openPRs: PROep[] = [];
+
+try {
+  const { data: prs } = await octokit.pulls.list({
+    owner: 'opensciencearchive',
+    repo: 'oeps',
+    state: 'open',
+  });
+
+  // For now, use basic PR data - in production this would parse the OEP frontmatter
+  openPRs = prs.map((pr) => ({
+    number: pr.number,
+    oep: pr.number, // Would be parsed from content
+    title: pr.title.replace(/^OEP-?\d+:?\s*/i, ''), // Strip OEP prefix if present
+    type: 'Technical', // Would be parsed from content
+    author: pr.user?.login ?? 'unknown',
+    status: 'Review',
+  }));
+
+  if (openPRs.length === 0) {
+    openPRs = DUMMY_PRS.map((pr) => ({
+      number: pr.number,
+      oep: pr.number,
+      title: pr.title.replace(/^OEP-?\d+:?\s*/i, ''),
+      type: 'Technical',
+      author: pr.user,
+      status: 'Review',
+    }));
+  }
+} catch (error) {
+  console.error('Error fetching PRs:', error);
+  openPRs = DUMMY_PRS.map((pr) => ({
+    number: pr.number,
+    oep: pr.number,
+    title: pr.title.replace(/^OEP-?\d+:?\s*/i, ''),
+    type: 'Technical',
+    author: pr.user,
+    status: 'Review',
+  }));
+}
+
+const totalOeps = acceptedOeps.length + openPRs.length;
+---
+
+<Layout title="OEPs — OSA Enhancement Proposals">
+  <Header />
+
+  <main class="main">
+    <!-- Hero -->
+    <section class="hero">
+      <h1 class="hero-title">Enhancement Proposals</h1>
+      <p class="hero-subtitle">Standards and specifications for the Open Science Archive protocol</p>
+    </section>
+
+    <!-- Stats -->
+    <section class="stats">
+      <div class="stat">
+        <span class="stat-value">{acceptedOeps.length}</span>
+        <span class="stat-label">Accepted</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{openPRs.length}</span>
+        <span class="stat-label">Under Review</span>
+      </div>
+      <a href="https://github.com/opensciencearchive/oeps" class="stat-link" target="_blank" rel="noopener">
+        View on GitHub →
+      </a>
+    </section>
+
+    <!-- What are OEPs -->
+    <section class="section">
+      <h2 class="section-title">What is an OEP?</h2>
+      <p class="section-text">
+        An OEP (OSA Enhancement Proposal) is a design document that describes a new feature, process, or guideline for the Open Science Archive protocol. OEPs provide a consistent and controlled path for proposing changes and documenting design decisions.
+      </p>
+    </section>
+
+    <!-- Types -->
+    <section class="section">
+      <h2 class="section-title">Types</h2>
+      <div class="types">
+        <div class="type">
+          <span class="type-name">Technical</span>
+          <span class="type-desc">Protocol specifications, APIs, and implementation standards</span>
+        </div>
+        <div class="type">
+          <span class="type-name">Meta</span>
+          <span class="type-desc">Governance processes, decision-making procedures</span>
+        </div>
+        <div class="type">
+          <span class="type-name">Informational</span>
+          <span class="type-desc">Guidelines, best practices, recommendations</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contributing -->
+    <section class="section">
+      <h2 class="section-title">Contributing</h2>
+      <p class="section-text">
+        To propose a new OEP, read <a href="/oep/oep-0001">OEP-0001</a> for the process and guidelines, then <a href="https://github.com/opensciencearchive/oeps/pulls/new" target="_blank" rel="noopener">submit a pull request</a> with your proposal. To comment on existing proposals, visit the <a href="https://github.com/opensciencearchive/oeps/pulls" target="_blank" rel="noopener">open pull requests</a> on GitHub.
+      </p>
+    </section>
+
+    <!-- Tabs -->
+    <section class="proposals">
+      <div class="tabs" role="tablist">
+        <button class="tab active" role="tab" aria-selected="true" data-tab="accepted">
+          Accepted
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="review">
+          Under Review
+        </button>
+      </div>
+
+      <!-- Accepted Panel -->
+      <div class="tab-panel active" id="accepted" role="tabpanel">
+        {acceptedOeps.length > 0 ? (
+          <ul class="oep-list">
+            {acceptedOeps.map((oep) => (
+              <li>
+                <a href={`/oep/${oep.id}`} class="oep-row">
+                  <span class="oep-num">{String(oep.data.oep).padStart(4, '0')}</span>
+                  <span class="oep-title">{oep.data.title}</span>
+                  <span class={`oep-type oep-type--${oep.data.type.toLowerCase()}`}>{oep.data.type}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="empty-state">No accepted OEPs yet.</p>
+        )}
+      </div>
+
+      <!-- Review Panel -->
+      <div class="tab-panel" id="review" role="tabpanel">
+        {openPRs.length > 0 ? (
+          <ul class="oep-list">
+            {openPRs.map((pr) => (
+              <li>
+                <a href={`/preview/${pr.number}`} class="oep-row">
+                  <span class="oep-num">{String(pr.oep).padStart(4, '0')}</span>
+                  <span class="oep-title">{pr.title}</span>
+                  <span class={`oep-type oep-type--${pr.type.toLowerCase()}`}>{pr.type}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="empty-state">No proposals under review.</p>
+        )}
+      </div>
+    </section>
+  </main>
+
+  <Footer />
+</Layout>
+
+<script>
+  const tabs = document.querySelectorAll('.tab');
+  const panels = document.querySelectorAll('.tab-panel');
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const targetId = tab.getAttribute('data-tab');
+
+      tabs.forEach((t) => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+
+      panels.forEach((panel) => {
+        panel.classList.remove('active');
+        if (panel.id === targetId) {
+          panel.classList.add('active');
+        }
+      });
+    });
+  });
+</script>
+
+<style>
+  .main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 var(--space-8) var(--space-16);
+  }
+
+  /* Hero */
+  .hero {
+    max-width: 720px;
+    padding: var(--space-12) 0 0;
+  }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin-bottom: var(--space-3);
+  }
+
+  .hero-subtitle {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    line-height: var(--leading-relaxed);
+  }
+
+  /* Stats */
+  .stats {
+    max-width: 720px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    padding: var(--space-4) 0 var(--space-16);
+  }
+
+  .stat {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: var(--text-xl);
+    font-weight: 500;
+  }
+
+  .stat-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+
+  .stat-link {
+    margin-left: auto;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    text-decoration: none;
+  }
+
+  .stat-link:hover {
+    color: var(--color-text);
+  }
+
+  /* Sections */
+  .section {
+    max-width: 720px;
+    margin-bottom: var(--space-8);
+  }
+
+  .section-title {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--space-2);
+  }
+
+  .section-text {
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+    color: var(--color-text-muted);
+  }
+
+  .section-text a {
+    color: var(--color-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: var(--color-border);
+  }
+
+  .section-text a:hover {
+    text-decoration-color: var(--color-text);
+  }
+
+  /* Types */
+  .types {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .type {
+    display: flex;
+    gap: var(--space-4);
+    font-size: var(--text-sm);
+  }
+
+  .type-name {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    flex-shrink: 0;
+    width: 110px;
+    color: var(--color-text);
+  }
+
+  .type-desc {
+    color: var(--color-text-muted);
+  }
+
+  /* Proposals */
+  .proposals {
+    max-width: 720px;
+    margin-top: var(--space-10);
+  }
+
+  .tabs {
+    display: flex;
+    gap: var(--space-6);
+    margin-bottom: var(--space-6);
+  }
+
+  .tab {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    padding: var(--space-2) 0;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .tab:hover {
+    color: var(--color-text);
+  }
+
+  .tab.active {
+    color: var(--color-text);
+    border-bottom-color: var(--color-accent);
+  }
+
+  /* Tab Panels */
+  .tab-panel {
+    display: none;
+  }
+
+  .tab-panel.active {
+    display: block;
+  }
+
+  /* OEP List */
+  .oep-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .oep-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-4);
+    padding: var(--space-3) 0;
+    text-decoration: none;
+    color: inherit;
+    transition: color 150ms ease;
+  }
+
+  .oep-row:hover .oep-title {
+    color: var(--color-text-muted);
+  }
+
+  .oep-num {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--color-text-subtle);
+    flex-shrink: 0;
+    width: 48px;
+  }
+
+  .oep-title {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    font-weight: 400;
+    flex: 1;
+    transition: color 150ms ease;
+  }
+
+  .oep-type {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: var(--space-1) var(--space-2);
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .oep-type--technical {
+    background: hsl(210, 50%, 95%);
+    color: hsl(210, 50%, 40%);
+  }
+
+  .oep-type--meta {
+    background: hsl(280, 40%, 95%);
+    color: hsl(280, 40%, 40%);
+  }
+
+  .oep-type--informational {
+    background: hsl(40, 50%, 94%);
+    color: hsl(40, 50%, 35%);
+  }
+
+  .empty-state {
+    padding: var(--space-6) 0;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    .main {
+      padding: 0 var(--space-6) var(--space-16);
+    }
+
+    .hero-title {
+      font-size: var(--text-3xl);
+    }
+
+    .hero-subtitle {
+      font-size: var(--text-base);
+    }
+
+    .stats {
+      flex-wrap: wrap;
+    }
+
+    .stat-link {
+      width: 100%;
+      margin-left: 0;
+      margin-top: var(--space-2);
+    }
+
+    .type {
+      flex-direction: column;
+      gap: var(--space-1);
+    }
+
+    .type-name {
+      width: auto;
+    }
+
+    .oep-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-3) 0;
+    }
+
+    .oep-num {
+      width: auto;
+      flex-shrink: 0;
+    }
+
+    .oep-title {
+      flex: 1;
+      font-size: var(--text-sm);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .oep-type {
+      flex-shrink: 0;
+    }
+  }
+</style>
