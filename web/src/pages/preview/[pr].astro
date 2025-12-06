@@ -1,10 +1,9 @@
 ---
 import { Octokit } from '@octokit/rest';
-import { marked } from 'marked';
 import Layout from '../../layouts/Layout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-import StatusBadge from '../../components/StatusBadge.astro';
+import OEPArticle from '../../components/OEPArticle.astro';
 
 // SSR mode - render on demand
 export const prerender = false;
@@ -16,14 +15,34 @@ const octokit = new Octokit({
   auth: import.meta.env.GITHUB_TOKEN,
 });
 
-let prData: {
+// Parse frontmatter from OEP markdown content
+function parseFrontmatter(content: string): Record<string, string> {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return {};
+
+  const result: Record<string, string> = {};
+  for (const line of match[1].split('\n')) {
+    const m = line.match(/^(\w+):\s*(.*)$/);
+    if (m) result[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+  }
+  return result;
+}
+
+let oepData: {
+  oep: number;
   title: string;
-  user: string;
-  html_url: string;
-  head_ref: string;
+  status: 'draft' | 'review' | 'accepted' | 'withdrawn' | 'living';
+  type: string;
+  author: string;
+  created: Date;
+  body: string;
 } | null = null;
 
-let content = '';
+let prMeta: {
+  user: string;
+  html_url: string;
+} | null = null;
+
 let error = '';
 
 try {
@@ -34,11 +53,9 @@ try {
     pull_number: prNumber,
   });
 
-  prData = {
-    title: prInfo.title,
+  prMeta = {
     user: prInfo.user?.login ?? 'unknown',
     html_url: prInfo.html_url,
-    head_ref: prInfo.head.ref,
   };
 
   // Fetch the files changed in the PR to find OEP files
@@ -48,9 +65,9 @@ try {
     pull_number: prNumber,
   });
 
-  // Find the main OEP file (new or modified)
+  // Find the main OEP file (new or modified) - in oeps/ directory
   const oepFile = files.find(
-    (file) => /^oep-\d+\.md$/.test(file.filename) && file.status !== 'removed'
+    (file) => /^oeps\/OEP-\d+\.md$/i.test(file.filename) && file.status !== 'removed'
   );
 
   if (oepFile) {
@@ -64,10 +81,21 @@ try {
 
     if ('content' in fileContent && fileContent.content) {
       const rawContent = Buffer.from(fileContent.content, 'base64').toString('utf-8');
+      const frontmatter = parseFrontmatter(rawContent);
 
       // Remove frontmatter and get body
-      const frontmatterMatch = rawContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
-      content = frontmatterMatch ? frontmatterMatch[1] : rawContent;
+      const bodyMatch = rawContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
+      const body = bodyMatch ? bodyMatch[1] : rawContent;
+
+      oepData = {
+        oep: parseInt(frontmatter.oep || '0', 10),
+        title: frontmatter.title || prInfo.title,
+        status: 'review',
+        type: frontmatter.type || 'technical',
+        author: frontmatter.author || prInfo.user?.login || 'unknown',
+        created: frontmatter.created ? new Date(frontmatter.created) : new Date(),
+        body,
+      };
     }
   } else {
     error = 'No OEP file found in this pull request.';
@@ -77,126 +105,46 @@ try {
   error = `Failed to load PR #${prNumber}. It may not exist or the GitHub API rate limit was exceeded.`;
 }
 
-// Render markdown to HTML
-const htmlContent = content ? await marked(content) : '';
-
 // Set cache headers for stale-while-revalidate
 Astro.response.headers.set('Cache-Control', 's-maxage=60, stale-while-revalidate');
 ---
 
-<Layout title={prData ? `Preview: ${prData.title}` : `Preview: PR #${prNumber}`}>
+<Layout title={oepData ? `OEP-${String(oepData.oep).padStart(4, '0')}: ${oepData.title}` : `Preview: PR #${prNumber}`}>
   <Header />
 
-  <div class="preview-banner">
-    <div class="banner-inner">
-      <span class="banner-icon">Preview Mode</span>
-      <span class="banner-text">
-        Content from <a href={prData?.html_url} target="_blank" rel="noopener">PR #{prNumber}</a>
-        {prData && <span> by @{prData.user}</span>}
-      </span>
-    </div>
-  </div>
-
-  <main class="main">
-    {error ? (
+  {error ? (
+    <main class="error-container">
       <div class="error">
         <h1 class="error-title">Unable to Load Preview</h1>
         <p class="error-message">{error}</p>
         <a href="/" class="error-link">Back to OEPs</a>
       </div>
-    ) : (
-      <article class="article">
-        <header class="article-header">
-          <div class="article-meta">
-            <span class="pr-number">PR #{prNumber}</span>
-            <StatusBadge status="Review" />
-          </div>
-          <h1 class="article-title">{prData?.title}</h1>
-        </header>
-
-        <div class="prose" set:html={htmlContent} />
-      </article>
-    )}
-  </main>
+    </main>
+  ) : oepData && prMeta && (
+    <OEPArticle
+      oep={oepData.oep}
+      title={oepData.title}
+      status={oepData.status}
+      type={oepData.type}
+      author={oepData.author}
+      created={oepData.created}
+      body={oepData.body}
+      previewBanner={{
+        prNumber,
+        prUrl: prMeta.html_url,
+        user: prMeta.user,
+      }}
+    />
+  )}
 
   <Footer />
 </Layout>
 
 <style>
-  .preview-banner {
-    background: hsl(45, 80%, 94%);
-    border-bottom: 1px solid hsl(45, 60%, 80%);
-    padding: var(--space-3) var(--space-6);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
-
-  .banner-inner {
-    max-width: 800px;
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .banner-icon {
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: hsl(45, 70%, 35%);
-    background: hsl(45, 70%, 85%);
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-  }
-
-  .banner-text {
-    font-size: var(--text-sm);
-    color: hsl(45, 50%, 25%);
-  }
-
-  .banner-text a {
-    color: hsl(45, 70%, 30%);
-    font-weight: 500;
-  }
-
-  .main {
+  .error-container {
     max-width: 800px;
     margin: 0 auto;
     padding: 0 var(--space-6);
-  }
-
-  .article {
-    padding: var(--space-12) 0;
-  }
-
-  .article-header {
-    padding-bottom: var(--space-10);
-    border-bottom: 1px solid var(--color-border);
-    margin-bottom: var(--space-10);
-  }
-
-  .article-meta {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin-bottom: var(--space-4);
-  }
-
-  .pr-number {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    color: var(--color-text-muted);
-  }
-
-  .article-title {
-    font-family: var(--font-display);
-    font-size: var(--text-4xl);
-    font-weight: 400;
-    letter-spacing: -0.02em;
-    line-height: var(--leading-tight);
   }
 
   .error {

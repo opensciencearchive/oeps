@@ -22,16 +22,16 @@ const { status } = Astro.props;
     border-radius: var(--radius-sm);
   }
 
-  /* Draft - amber/yellow */
+  /* Draft - muted gray */
   .status-draft {
-    color: hsl(35, 80%, 30%);
-    background: hsl(40, 80%, 92%);
+    color: var(--color-text-muted);
+    background: var(--color-bg-alt);
   }
 
-  /* Review - blue */
+  /* Review - amber/yellow */
   .status-review {
-    color: hsl(210, 70%, 35%);
-    background: hsl(210, 70%, 93%);
+    color: hsl(35, 80%, 30%);
+    background: hsl(40, 80%, 92%);
   }
 
   /* Accepted - sage green (accent) */

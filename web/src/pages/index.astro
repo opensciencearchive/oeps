@@ -30,6 +30,19 @@ type PROep = {
   status: string;
 };
 
+// Parse frontmatter from OEP markdown content
+function parseFrontmatter(content: string): Record<string, string> {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return {};
+
+  const result: Record<string, string> = {};
+  for (const line of match[1].split('\n')) {
+    const m = line.match(/^(\w+):\s*(.*)$/);
+    if (m) result[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+  }
+  return result;
+}
+
 let openPRs: PROep[] = [];
 
 try {
@@ -39,15 +52,60 @@ try {
     state: 'open',
   });
 
-  // For now, use basic PR data - in production this would parse the OEP frontmatter
-  openPRs = prs.map((pr) => ({
-    number: pr.number,
-    oep: pr.number, // Would be parsed from content
-    title: pr.title.replace(/^OEP-?\d+:?\s*/i, ''), // Strip OEP prefix if present
-    type: 'Technical', // Would be parsed from content
-    author: pr.user?.login ?? 'unknown',
-    status: 'Review',
-  }));
+  // Fetch OEP content from each PR to get frontmatter
+  openPRs = await Promise.all(
+    prs.map(async (pr) => {
+      try {
+        // Get files changed in this PR
+        const { data: files } = await octokit.pulls.listFiles({
+          owner: 'opensciencearchive',
+          repo: 'oeps',
+          pull_number: pr.number,
+        });
+
+        // Find the OEP file (in oeps/ directory)
+        const oepFile = files.find((f) => /^oeps\/OEP-\d+\.md$/i.test(f.filename));
+
+        if (oepFile) {
+          // Fetch the file content from the PR branch
+          const { data: fileData } = await octokit.repos.getContent({
+            owner: 'opensciencearchive',
+            repo: 'oeps',
+            path: oepFile.filename,
+            ref: pr.head.ref,
+          });
+
+          if ('content' in fileData && fileData.content) {
+            const content = Buffer.from(fileData.content, 'base64').toString('utf-8');
+            const frontmatter = parseFrontmatter(content);
+
+            // Skip drafts, only include review status
+            const status = frontmatter.status?.toLowerCase() || 'draft';
+            if (status === 'draft') {
+              return null;
+            }
+
+            return {
+              number: pr.number,
+              oep: parseInt(frontmatter.oep || '0', 10),
+              title: frontmatter.title || pr.title,
+              type: frontmatter.type || 'technical',
+              author: frontmatter.author?.split('<')[0].trim() || pr.user?.login || 'unknown',
+              status: 'review',
+            };
+          }
+        }
+      } catch (e) {
+        // Fall back to PR data if we can't fetch content
+      }
+
+      // Fallback: skip PRs we can't parse (treat as draft)
+      return null;
+    })
+  );
+
+  // Filter out nulls (drafts and unparseable PRs)
+  openPRs = openPRs.filter((pr): pr is PROep => pr !== null);
 } catch (error) {
   console.error('Error fetching PRs:', error);
   // Leave openPRs empty on error
