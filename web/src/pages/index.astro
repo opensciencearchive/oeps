@@ -7,17 +7,14 @@ import { Octokit } from '@octokit/rest';
 import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
-import StatusBadge from '../components/StatusBadge.astro';
 
 const oeps = await getCollection('oeps');
 const sortedOeps = oeps.sort((a, b) => a.data.oep - b.data.oep);
 
 // Categorize
 const acceptedOeps = sortedOeps.filter(
-  (oep) => oep.data.status === 'Accepted' || oep.data.status === 'Living'
+  (oep) => oep.data.status === 'accepted' || oep.data.status === 'living'
 );
-
-import { DUMMY_PRS } from '../content/dummy-oeps';
 
 const octokit = new Octokit({
   auth: import.meta.env.GITHUB_TOKEN,
@@ -51,30 +48,10 @@ try {
     author: pr.user?.login ?? 'unknown',
     status: 'Review',
   }));
-
-  if (openPRs.length === 0) {
-    openPRs = DUMMY_PRS.map((pr) => ({
-      number: pr.number,
-      oep: pr.number,
-      title: pr.title.replace(/^OEP-?\d+:?\s*/i, ''),
-      type: 'Technical',
-      author: pr.user,
-      status: 'Review',
-    }));
-  }
 } catch (error) {
   console.error('Error fetching PRs:', error);
-  openPRs = DUMMY_PRS.map((pr) => ({
-    number: pr.number,
-    oep: pr.number,
-    title: pr.title.replace(/^OEP-?\d+:?\s*/i, ''),
-    type: 'Technical',
-    author: pr.user,
-    status: 'Review',
-  }));
+  // Leave openPRs empty on error
 }
-
-const totalOeps = acceptedOeps.length + openPRs.length;
 ---
 
 <Layout title="OEPs — OSA Enhancement Proposals">
@@ -119,7 +96,7 @@ const totalOeps = acceptedOeps.length + openPRs.length;
           <span class="type-desc">Protocol specifications, APIs, and implementation standards</span>
         </div>
         <div class="type">
-          <span class="type-name">Meta</span>
+          <span class="type-name">Process</span>
           <span class="type-desc">Governance processes, decision-making procedures</span>
         </div>
         <div class="type">
@@ -163,7 +140,7 @@ const totalOeps = acceptedOeps.length + openPRs.length;
             ))}
           </ul>
         ) : (
-          <p class="empty-state">No accepted OEPs yet.</p>
+          <p class="empty-state">No accepted OEPs yet. <a href="https://github.com/opensciencearchive/oeps" target="_blank" rel="noopener">Submit the first one →</a></p>
         )}
       </div>
 
@@ -182,7 +159,7 @@ const totalOeps = acceptedOeps.length + openPRs.length;
             ))}
           </ul>
         ) : (
-          <p class="empty-state">No proposals under review.</p>
+          <p class="empty-state">No proposals under review. <a href="https://github.com/opensciencearchive/oeps/pulls/new" target="_blank" rel="noopener">Submit one here →</a></p>
         )}
       </div>
     </section>
@@ -432,20 +409,30 @@ const totalOeps = acceptedOeps.length + openPRs.length;
     color: hsl(210, 50%, 40%);
   }
 
-  .oep-type--meta {
-    background: hsl(280, 40%, 95%);
-    color: hsl(280, 40%, 40%);
-  }
-
   .oep-type--informational {
     background: hsl(40, 50%, 94%);
     color: hsl(40, 50%, 35%);
+  }
+
+  .oep-type--process {
+    background: hsl(160, 30%, 93%);
+    color: hsl(160, 35%, 35%);
   }
 
   .empty-state {
     padding: var(--space-6) 0;
     font-size: var(--text-sm);
     color: var(--color-text-muted);
+  }
+
+  .empty-state a {
+    color: var(--color-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .empty-state a:hover {
+    color: var(--color-accent-hover);
   }
 
   /* Mobile */

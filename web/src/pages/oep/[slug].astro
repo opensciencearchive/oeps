@@ -416,6 +416,21 @@ function formatDate(date: Date): string {
 </style>
 
 <style is:global>
+  /* Fix gradient bleeding onto text - add padding to h1 background */
+  .prose h1 {
+    padding-bottom: var(--space-6);
+  }
+
+  .prose h1::after {
+    bottom: 0;
+  }
+
+  /* Align first heading with TOC */
+  .prose h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+  }
+
   /* Remove large top margin from first h2 in prose */
   .prose h2:first-of-type {
     margin-top: 0;
