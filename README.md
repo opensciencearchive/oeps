@@ -11,7 +11,18 @@ web/            # Website (Astro)
 
 ## Writing an OEP
 
-Create a new file in `oeps/` named `OEP-XXXX.md` with frontmatter:
+Use the helper script to create a new OEP:
+
+```sh
+./create-oep.sh <number> "<title>"
+
+# Example
+./create-oep.sh 5 "Decentralized Storage Protocol"
+```
+
+This creates `oeps/OEP-0005.md` with the standard template, your git author info, and today's date.
+
+Alternatively, copy `template.md` manually and fill in the frontmatter:
 
 ```yaml
 ---
@@ -23,8 +34,6 @@ author: Your Name <email@example.com>
 created: YYYY-MM-DD
 ---
 ```
-
-See [OEP-0001](oeps/OEP-0001.md) for the full process and template.
 
 ## Development
 
