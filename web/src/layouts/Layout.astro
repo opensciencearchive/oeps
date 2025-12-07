@@ -26,10 +26,21 @@ const { title, description = 'OSA Enhancement Proposals — the legislative hub 
 </html>
 
 <style is:global>
+  html, body {
+    height: 100%;
+  }
+
   body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
     background: var(--color-bg);
     color: var(--color-text);
     font-family: var(--font-body);
     line-height: var(--leading-relaxed);
+  }
+
+  body > main {
+    flex: 1;
   }
 </style>
