@@ -1,15 +1,16 @@
 ---
 oep: {{OEP_NUMBER}}
 title: {{TITLE}}
-status: draft
 type: technical
-author: {{AUTHOR}}
+status: ideation
+authors: {{AUTHOR}}
 created: {{DATE}}
+labels:
 ---
 
 # Abstract
 
-A short (~200 word) description of the technical issue being addressed.
+A short (~200 word) description of the issue being addressed.
 
 # Motivation
 
@@ -39,4 +40,4 @@ All OEPs should contain a section that discusses any security or privacy implica
 
 # Open Issues
 
-While an OEP is in draft status, list any unresolved questions or implementation considerations here.
+While an OEP is in ideation or discussion, list any unresolved questions or implementation considerations here.

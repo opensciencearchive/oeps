@@ -5,16 +5,16 @@ export const prerender = true;
 import { getCollection } from 'astro:content';
 import { Octokit } from '@octokit/rest';
 import Layout from '../layouts/Layout.astro';
-import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 
 const oeps = await getCollection('oeps');
 const sortedOeps = oeps.sort((a, b) => a.data.oep - b.data.oep);
 
-// Categorize
-const acceptedOeps = sortedOeps.filter(
-  (oep) => oep.data.status === 'accepted' || oep.data.status === 'living'
-);
+// Categorize merged OEPs by status
+const livingOeps = sortedOeps.filter((oep) => oep.data.status === 'living');
+const acceptedOeps = sortedOeps.filter((oep) => oep.data.status === 'accepted');
+
+// PR OEPs will be split into ideation and discussion after fetching
 
 const octokit = new Octokit({
   auth: import.meta.env.GITHUB_TOKEN,
@@ -26,7 +26,8 @@ type PROep = {
   oep: number;
   title: string;
   type: string;
-  author: string;
+  labels: string[];
+  authors: string;
   status: string;
   created: Date;
 };
@@ -41,14 +42,25 @@ function formatDate(date: Date): string {
 }
 
 // Parse frontmatter from OEP markdown content
-function parseFrontmatter(content: string): Record<string, string> {
+function parseFrontmatter(content: string): Record<string, any> {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return {};
 
-  const result: Record<string, string> = {};
+  const result: Record<string, any> = {};
   for (const line of match[1].split('\n')) {
     const m = line.match(/^(\w+):\s*(.*)$/);
-    if (m) result[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+    if (m) {
+      const [, key, value] = m;
+      // Handle labels as comma-separated list
+      if (key === 'labels') {
+        result[key] = value
+          .split(',')
+          .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
+          .filter((s) => s.length > 0);
+      } else {
+        result[key] = value.replace(/^['"]|['"]$/g, '');
+      }
+    }
   }
   return result;
 }
@@ -89,20 +101,34 @@ try {
             const content = Buffer.from(fileData.content, 'base64').toString('utf-8');
             const frontmatter = parseFrontmatter(content);
 
-            // Skip drafts, only include review status
-            const status = frontmatter.status?.toLowerCase() || 'draft';
-            if (status === 'draft') {
+            // Validate required fields - skip PR if missing
+            if (!frontmatter.oep || !frontmatter.title || !frontmatter.type || !frontmatter.status || !frontmatter.authors || !frontmatter.created) {
+              console.warn(`[PR #${pr.number}] Missing required frontmatter fields, skipping`);
+              return null;
+            }
+
+            // Only include ideation and discussion status PRs
+            const status = frontmatter.status.toLowerCase();
+            if (status !== 'ideation' && status !== 'discussion') {
+              return null;
+            }
+
+            // Validate type is one of the allowed values
+            const validTypes = ['technical', 'process', 'informational'];
+            if (!validTypes.includes(frontmatter.type)) {
+              console.warn(`[PR #${pr.number}] Invalid type "${frontmatter.type}", skipping`);
               return null;
             }
 
             return {
               number: pr.number,
-              oep: parseInt(frontmatter.oep || '0', 10),
-              title: frontmatter.title || pr.title,
-              type: frontmatter.type || 'technical',
-              author: frontmatter.author?.split('<')[0].trim() || pr.user?.login || 'unknown',
-              status: 'review',
-              created: frontmatter.created ? new Date(frontmatter.created) : new Date(pr.created_at),
+              oep: parseInt(frontmatter.oep, 10),
+              title: frontmatter.title,
+              type: frontmatter.type,
+              labels: frontmatter.labels ?? [],
+              authors: frontmatter.authors.split('<')[0].trim(),
+              status,
+              created: new Date(frontmatter.created),
             };
           }
         }
@@ -110,136 +136,134 @@ try {
         // Fall back to PR data if we can't fetch content
       }
 
-      // Fallback: skip PRs we can't parse (treat as draft)
+      // Fallback: skip PRs we can't parse
       return null;
     })
   );
 
-  // Filter out nulls (drafts and unparseable PRs)
+  // Filter out nulls
   openPRs = openPRs.filter((pr): pr is PROep => pr !== null);
 } catch (error) {
   console.error('Error fetching PRs:', error);
   // Leave openPRs empty on error
 }
+
+// Split PRs by status
+const ideationPRs = openPRs.filter((pr) => pr.status === 'ideation');
+const discussionPRs = openPRs.filter((pr) => pr.status === 'discussion');
+
 ---
 
 <Layout title="OEPs — OSA Enhancement Proposals">
-  <Header />
-
   <main class="main">
-    <!-- Header row -->
-    <header class="page-header">
-      <div class="header-content">
-        <h1 class="page-title">Enhancement Proposals</h1>
-        <p class="page-subtitle">Standards and specifications for the Open Science Archive protocol</p>
-      </div>
-      <a href="https://github.com/opensciencearchive/oeps" class="github-link" target="_blank" rel="noopener">
-        View on GitHub →
+    <!-- Hero Header -->
+    <header class="hero">
+      <p class="hero-eyebrow">Open Science Archive</p>
+      <h1 class="hero-title">
+        <span class="hero-title-line">Enhancement</span>
+        <span class="hero-title-line hero-title-accent">Proposals</span>
+      </h1>
+      <p class="hero-subtitle">
+        The governance process for the OSA protocol. Propose changes, discuss ideas, collaborate. Learn more in <a href="/oep/oep-0001">OEP-0001</a>.
+      </p>
+      <a href="https://github.com/opensciencearchive/oeps" class="hero-cta" target="_blank" rel="noopener">
+        Submit a proposal on GitHub →
       </a>
     </header>
 
-    <!-- Collapsible info section -->
-    <details class="info-section">
-      <summary class="info-toggle">
-        <span class="info-toggle-text">New here? Learn about OEPs</span>
-        <span class="info-toggle-icon" aria-hidden="true"></span>
-      </summary>
-      <div class="info-content">
-        <div class="info-block">
-          <h2 class="info-title">What is an OEP?</h2>
-          <p class="info-text">
-            An OEP (OSA Enhancement Proposal) is a design document that describes a new feature, process, or guideline for the Open Science Archive protocol. OEPs provide a consistent and controlled path for proposing changes and documenting design decisions.
-          </p>
-        </div>
-
-        <div class="info-block">
-          <h2 class="info-title">Types</h2>
-          <div class="types">
-            <div class="type">
-              <span class="type-name">Technical</span>
-              <span class="type-desc">Protocol specifications, APIs, and implementation standards</span>
-            </div>
-            <div class="type">
-              <span class="type-name">Process</span>
-              <span class="type-desc">Governance processes, decision-making procedures</span>
-            </div>
-            <div class="type">
-              <span class="type-name">Informational</span>
-              <span class="type-desc">Guidelines, best practices, recommendations</span>
-            </div>
+    <!-- Filters and List -->
+    <section class="proposals">
+      <div class="list-header">
+        <h2 class="list-title">All Proposals</h2>
+        <div class="filters">
+          <span class="filters-label">Filter:</span>
+          <div class="filter-buttons">
+            <button class="filter-btn filter-ideation" data-status="ideation">
+              Ideation <span class="filter-count">{ideationPRs.length}</span>
+            </button>
+            <button class="filter-btn filter-discussion" data-status="discussion">
+              Discussion <span class="filter-count">{discussionPRs.length}</span>
+            </button>
+            <button class="filter-btn filter-accepted" data-status="accepted">
+              Accepted <span class="filter-count">{acceptedOeps.length}</span>
+            </button>
+            <button class="filter-btn filter-living" data-status="living">
+              Living <span class="filter-count">{livingOeps.length}</span>
+            </button>
           </div>
         </div>
-
-        <div class="info-block">
-          <h2 class="info-title">Contributing</h2>
-          <p class="info-text">
-            To propose a new OEP, read <a href="/oep/oep-0001">OEP-0001</a> for the process and guidelines, then <a href="https://github.com/opensciencearchive/oeps/pulls/new" target="_blank" rel="noopener">submit a pull request</a> with your proposal. To comment on existing proposals, visit the <a href="https://github.com/opensciencearchive/oeps/pulls" target="_blank" rel="noopener">open pull requests</a> on GitHub.
-          </p>
-        </div>
-      </div>
-    </details>
-
-    <!-- Tabs and List - now primary content -->
-    <section class="proposals">
-      <div class="tabs" role="tablist">
-        <button class="tab active" role="tab" aria-selected="true" data-tab="accepted">
-          Accepted <span class="tab-count">{acceptedOeps.length}</span>
-        </button>
-        <button class="tab" role="tab" aria-selected="false" data-tab="review">
-          Under Review <span class="tab-count">{openPRs.length}</span>
-        </button>
       </div>
 
-      <!-- Accepted Panel -->
-      <div class="tab-panel active" id="accepted" role="tabpanel">
-        {acceptedOeps.length > 0 ? (
-          <ul class="oep-list">
-            {acceptedOeps.map((oep) => (
-              <li>
-                <a href={`/oep/${oep.id}`} class="oep-card">
-                  <div class="oep-card-badge">
-                    <span class={`oep-type oep-type--${oep.data.type.toLowerCase()}`}>{oep.data.type}</span>
-                  </div>
-                  <div class="oep-card-content">
-                    <span class="oep-num">OEP-{String(oep.data.oep).padStart(4, '0')}</span>
-                    <span class="oep-title">{oep.data.title}</span>
-                    <span class="oep-date">{formatDate(oep.data.created)}</span>
-                  </div>
-                </a>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p class="empty-state">No accepted OEPs yet. <a href="https://github.com/opensciencearchive/oeps" target="_blank" rel="noopener">Submit the first one →</a></p>
-        )}
-      </div>
+      <ul class="oep-list">
+        {/* Ideation PRs */}
+        {ideationPRs.map((pr) => (
+          <li data-status="ideation">
+            <a href={`/preview/${pr.number}`} class="oep-card">
+              <div class="oep-card-badges">
+                <span class="status-badge status-ideation">ideation</span>
+                <span class="oep-type">{pr.type}</span>
+              </div>
+              <div class="oep-card-content">
+                <span class="oep-num">OEP-{String(pr.oep).padStart(4, '0')}</span>
+                <span class="oep-title">{pr.title}</span>
+                <span class="oep-date">{formatDate(pr.created)}</span>
+              </div>
+            </a>
+          </li>
+        ))}
+        {/* Discussion PRs */}
+        {discussionPRs.map((pr) => (
+          <li data-status="discussion">
+            <a href={`/preview/${pr.number}`} class="oep-card">
+              <div class="oep-card-badges">
+                <span class="status-badge status-discussion">discussion</span>
+                <span class="oep-type">{pr.type}</span>
+              </div>
+              <div class="oep-card-content">
+                <span class="oep-num">OEP-{String(pr.oep).padStart(4, '0')}</span>
+                <span class="oep-title">{pr.title}</span>
+                <span class="oep-date">{formatDate(pr.created)}</span>
+              </div>
+            </a>
+          </li>
+        ))}
+        {/* Accepted OEPs */}
+        {acceptedOeps.map((oep) => (
+          <li data-status="accepted">
+            <a href={`/oep/${oep.id}`} class="oep-card">
+              <div class="oep-card-badges">
+                <span class="status-badge status-accepted">accepted</span>
+                <span class="oep-type">{oep.data.type}</span>
+              </div>
+              <div class="oep-card-content">
+                <span class="oep-num">OEP-{String(oep.data.oep).padStart(4, '0')}</span>
+                <span class="oep-title">{oep.data.title}</span>
+                <span class="oep-date">{formatDate(oep.data.created)}</span>
+              </div>
+            </a>
+          </li>
+        ))}
+        {/* Living OEPs */}
+        {livingOeps.map((oep) => (
+          <li data-status="living">
+            <a href={`/oep/${oep.id}`} class="oep-card">
+              <div class="oep-card-badges">
+                <span class="status-badge status-living">living</span>
+                <span class="oep-type">{oep.data.type}</span>
+              </div>
+              <div class="oep-card-content">
+                <span class="oep-num">OEP-{String(oep.data.oep).padStart(4, '0')}</span>
+                <span class="oep-title">{oep.data.title}</span>
+                <span class="oep-date">{formatDate(oep.data.created)}</span>
+              </div>
+            </a>
+          </li>
+        ))}
+      </ul>
 
-      <!-- Review Panel -->
-      <div class="tab-panel" id="review" role="tabpanel">
-        {openPRs.length > 0 ? (
-          <>
-            <p class="review-prompt">These proposals are open for community feedback. Please join the discussion on GitHub.</p>
-            <ul class="oep-list">
-              {openPRs.map((pr) => (
-                <li>
-                  <a href={`/preview/${pr.number}`} class="oep-card">
-                    <div class="oep-card-badge">
-                      <span class={`oep-type oep-type--${pr.type.toLowerCase()}`}>{pr.type}</span>
-                    </div>
-                    <div class="oep-card-content">
-                      <span class="oep-num">OEP-{String(pr.oep).padStart(4, '0')}</span>
-                      <span class="oep-title">{pr.title}</span>
-                      <span class="oep-date">{formatDate(pr.created)}</span>
-                    </div>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <p class="empty-state">No proposals under review. <a href="https://github.com/opensciencearchive/oeps/pulls/new" target="_blank" rel="noopener">Submit one here →</a></p>
-        )}
-      </div>
+      <p class="empty-state" id="empty-message" style="display: none;">
+        No OEPs match the selected filters.
+      </p>
     </section>
   </main>
 
@@ -247,26 +271,42 @@ try {
 </Layout>
 
 <script>
-  const tabs = document.querySelectorAll('.tab');
-  const panels = document.querySelectorAll('.tab-panel');
+  const filterBtns = document.querySelectorAll('.filter-btn');
+  const oepItems = document.querySelectorAll('.oep-list li[data-status]');
+  const emptyMessage = document.getElementById('empty-message');
 
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const targetId = tab.getAttribute('data-tab');
+  function updateVisibility() {
+    const activeStatuses = new Set<string>();
+    filterBtns.forEach((btn) => {
+      if (btn.classList.contains('active')) {
+        activeStatuses.add(btn.getAttribute('data-status')!);
+      }
+    });
 
-      tabs.forEach((t) => {
-        t.classList.remove('active');
-        t.setAttribute('aria-selected', 'false');
-      });
-      tab.classList.add('active');
-      tab.setAttribute('aria-selected', 'true');
+    // If no filters active, show everything
+    const showAll = activeStatuses.size === 0;
 
-      panels.forEach((panel) => {
-        panel.classList.remove('active');
-        if (panel.id === targetId) {
-          panel.classList.add('active');
-        }
-      });
+    let visibleCount = 0;
+    oepItems.forEach((item) => {
+      const status = item.getAttribute('data-status');
+      if (showAll || (status && activeStatuses.has(status))) {
+        (item as HTMLElement).style.display = '';
+        visibleCount++;
+      } else {
+        (item as HTMLElement).style.display = 'none';
+      }
+    });
+
+    // Show empty message if no items visible
+    if (emptyMessage) {
+      emptyMessage.style.display = visibleCount === 0 ? 'block' : 'none';
+    }
+  }
+
+  filterBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      btn.classList.toggle('active');
+      updateVisibility();
     });
   });
 </script>
@@ -276,41 +316,71 @@ try {
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 var(--space-6) var(--space-16);
+    padding: 0 var(--space-6) var(--space-20);
     box-sizing: border-box;
   }
 
-  /* Page Header */
-  .page-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-6);
-    padding: var(--space-8) 0 var(--space-6);
+  /* Hero Header */
+  .hero {
+    padding: var(--space-40) 0 var(--space-40);
+    max-width: 500px;
+    margin-left: var(--space-32);
   }
 
-  .page-title {
-    font-family: var(--font-display);
-    font-size: var(--text-3xl);
-    font-weight: 400;
-    letter-spacing: var(--tracking-tight);
-    margin-bottom: var(--space-1);
-  }
-
-  .page-subtitle {
-    font-size: var(--text-sm);
+  .hero-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
     color: var(--color-text-muted);
+    margin-bottom: var(--space-4);
   }
 
-  .github-link {
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-bottom: var(--space-6);
+  }
+
+  .hero-title-line {
+    display: block;
+  }
+
+  .hero-title-accent {
+    color: var(--color-accent);
+  }
+
+  .hero-subtitle {
+    font-size: var(--text-lg);
+    line-height: var(--leading-relaxed);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+    max-width: 420px;
+  }
+
+  .hero-subtitle a {
+    color: var(--color-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: var(--color-border);
+    transition: text-decoration-color var(--transition-fast);
+  }
+
+  .hero-subtitle a:hover {
+    text-decoration-color: var(--color-text);
+  }
+
+  .hero-cta {
     font-size: var(--text-sm);
     color: var(--color-text-muted);
     text-decoration: none;
-    white-space: nowrap;
-    padding-top: var(--space-2);
+    transition: color var(--transition-fast);
   }
 
-  .github-link:hover {
+  .hero-cta:hover {
     color: var(--color-text);
   }
 
@@ -320,63 +390,114 @@ try {
     width: 100%;
   }
 
-  .tabs {
+  /* List Header */
+  .list-header {
     display: flex;
-    gap: var(--space-2);
-    padding-bottom: var(--space-4);
-    border-bottom: 1px solid var(--color-border);
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-8) 0 var(--space-6);
   }
 
-  .tab {
+  .list-title {
+    font-family: var(--font-display);
+    font-size: var(--text-2xl);
+    font-weight: 400;
+    letter-spacing: var(--tracking-tight);
+    color: var(--color-text);
+    margin: 0;
+  }
+
+  /* Filters */
+  .filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .filters-label {
+    font-size: var(--text-xs);
+    color: var(--color-text-subtle);
+  }
+
+  .filter-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  @media (max-width: 640px) {
+    .hero {
+      padding: var(--space-16) 0 var(--space-8);
+      margin-left: 0;
+    }
+
+    .filters {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-2);
+    }
+  }
+
+  .filter-btn {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     font-family: var(--font-body);
     font-size: var(--text-sm);
     font-weight: 500;
-    padding: var(--space-2) var(--space-4);
-    background: none;
+    padding: var(--space-2) var(--space-3);
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    color: var(--color-text-muted);
     cursor: pointer;
     transition: all 150ms ease;
+    opacity: 0.5;
   }
 
-  .tab:hover {
-    color: var(--color-text);
-    border-color: var(--color-border);
+  .filter-btn.active {
+    opacity: 1;
   }
 
-  .tab.active {
-    color: var(--color-text);
-    background: var(--color-bg-alt);
-    border-color: var(--color-border);
-  }
-
-  .tab-count {
+  .filter-count {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
-    padding: 2px 6px;
-    background: var(--color-bg);
-    border-radius: 10px;
-    color: var(--color-text-subtle);
+    opacity: 0.7;
   }
 
-  .tab.active .tab-count {
-    background: var(--color-bg);
-    color: var(--color-text-muted);
+  /* Filter button colors matching status badges */
+  .filter-btn.filter-ideation {
+    background: hsl(270, 45%, 93%);
+    color: hsl(270, 50%, 40%);
   }
 
-  /* Tab Panels */
-  .tab-panel {
-    display: none;
-    width: 100%;
+  .filter-btn.filter-ideation.active {
+    border-color: hsl(270, 45%, 75%);
   }
 
-  .tab-panel.active {
-    display: block;
-    padding-top: var(--space-6);
+  .filter-btn.filter-discussion {
+    background: hsl(40, 80%, 92%);
+    color: hsl(35, 80%, 30%);
+  }
+
+  .filter-btn.filter-discussion.active {
+    border-color: hsl(40, 70%, 70%);
+  }
+
+  .filter-btn.filter-accepted {
+    background: hsl(160, 35%, 90%);
+    color: hsl(160, 40%, 32%);
+  }
+
+  .filter-btn.filter-accepted.active {
+    border-color: hsl(160, 35%, 70%);
+  }
+
+  .filter-btn.filter-living {
+    background: hsl(210, 50%, 92%);
+    color: hsl(210, 50%, 35%);
+  }
+
+  .filter-btn.filter-living.active {
+    border-color: hsl(210, 45%, 75%);
   }
 
   /* OEP List */
@@ -405,8 +526,41 @@ try {
     border-color: var(--color-border);
   }
 
-  .oep-card-badge {
+  .oep-card-badges {
+    display: flex;
+    gap: var(--space-2);
     margin-bottom: var(--space-3);
+  }
+
+  /* Status badges on cards */
+  .status-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: lowercase;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+  }
+
+  .status-badge.status-ideation {
+    color: hsl(270, 50%, 40%);
+    background: hsl(270, 45%, 93%);
+  }
+
+  .status-badge.status-discussion {
+    color: hsl(35, 80%, 30%);
+    background: hsl(40, 80%, 92%);
+  }
+
+  .status-badge.status-accepted {
+    color: hsl(160, 40%, 32%);
+    background: hsl(160, 35%, 90%);
+  }
+
+  .status-badge.status-living {
+    color: hsl(210, 50%, 35%);
+    background: hsl(210, 50%, 92%);
   }
 
   .oep-card-content {
@@ -442,10 +596,14 @@ try {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     font-weight: 500;
-    text-transform: uppercase;
+    text-transform: lowercase;
     letter-spacing: var(--tracking-wider);
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-sm);
+    /* Neutral gray for all types */
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
   }
 
   /* Desktop: horizontal row layout */
@@ -458,7 +616,7 @@ try {
       padding: var(--space-4) var(--space-5);
     }
 
-    .oep-card-badge {
+    .oep-card-badges {
       order: 2;
       margin: 0;
     }
@@ -490,21 +648,6 @@ try {
     }
   }
 
-  .oep-type--technical {
-    background: hsl(210, 50%, 95%);
-    color: hsl(210, 50%, 40%);
-  }
-
-  .oep-type--informational {
-    background: hsl(40, 50%, 94%);
-    color: hsl(40, 50%, 35%);
-  }
-
-  .oep-type--process {
-    background: hsl(160, 30%, 93%);
-    color: hsl(160, 35%, 35%);
-  }
-
   .review-prompt {
     font-size: var(--text-xs);
     color: var(--color-text-subtle);
@@ -527,121 +670,4 @@ try {
     color: var(--color-accent-hover);
   }
 
-  /* Collapsible Info Section */
-  .info-section {
-    margin-bottom: var(--space-6);
-  }
-
-  .info-toggle {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) 0;
-    font-size: var(--text-xs);
-    color: var(--color-text-subtle);
-    cursor: pointer;
-    list-style: none;
-  }
-
-  .info-toggle::-webkit-details-marker {
-    display: none;
-  }
-
-  .info-toggle-icon::after {
-    content: '+';
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-  }
-
-  .info-section[open] .info-toggle-icon::after {
-    content: '−';
-  }
-
-  .info-toggle:hover {
-    color: var(--color-text-muted);
-  }
-
-  .info-content {
-    padding: var(--space-4) 0 var(--space-6);
-  }
-
-  .info-block {
-    margin-bottom: var(--space-6);
-  }
-
-  .info-block:last-child {
-    margin-bottom: 0;
-  }
-
-  .info-title {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin-bottom: var(--space-2);
-  }
-
-  .info-text {
-    font-size: var(--text-sm);
-    line-height: var(--leading-relaxed);
-    color: var(--color-text-muted);
-  }
-
-  .info-text a {
-    color: var(--color-text);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    text-decoration-color: var(--color-border);
-  }
-
-  .info-text a:hover {
-    text-decoration-color: var(--color-text);
-  }
-
-  /* Types */
-  .types {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .type {
-    display: flex;
-    gap: var(--space-4);
-    font-size: var(--text-sm);
-  }
-
-  .type-name {
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    font-weight: 500;
-    flex-shrink: 0;
-    width: 100px;
-    color: var(--color-text);
-  }
-
-  .type-desc {
-    color: var(--color-text-muted);
-  }
-
-  /* Mobile */
-  @media (max-width: 640px) {
-    .page-header {
-      flex-direction: column;
-      gap: var(--space-3);
-    }
-
-    .github-link {
-      padding-top: 0;
-    }
-
-    .type {
-      flex-direction: column;
-      gap: var(--space-1);
-    }
-
-    .type-name {
-      width: auto;
-    }
-  }
 </style>

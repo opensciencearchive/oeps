@@ -1,6 +1,6 @@
 ---
 interface Props {
-  status: 'draft' | 'review' | 'accepted' | 'withdrawn' | 'living';
+  status: 'ideation' | 'discussion' | 'accepted' | 'living' | 'abandoned';
 }
 
 const { status } = Astro.props;
@@ -22,33 +22,33 @@ const { status } = Astro.props;
     border-radius: var(--radius-sm);
   }
 
-  /* Draft - muted gray */
-  .status-draft {
-    color: var(--color-text-muted);
-    background: var(--color-bg-alt);
+  /* Ideation - light purple (early stage, exploratory) */
+  .status-ideation {
+    color: hsl(270, 50%, 40%);
+    background: hsl(270, 45%, 93%);
   }
 
-  /* Review - amber/yellow */
-  .status-review {
+  /* Discussion - amber/yellow (active engagement) */
+  .status-discussion {
     color: hsl(35, 80%, 30%);
     background: hsl(40, 80%, 92%);
   }
 
-  /* Accepted - sage green (accent) */
+  /* Accepted - sage green (ratified, part of spec) */
   .status-accepted {
     color: hsl(160, 40%, 32%);
     background: hsl(160, 35%, 90%);
   }
 
-  /* Withdrawn - muted gray */
-  .status-withdrawn {
-    color: var(--color-text-muted);
-    background: var(--color-bg-alt);
+  /* Living - blue (continuously updated) */
+  .status-living {
+    color: hsl(210, 50%, 35%);
+    background: hsl(210, 50%, 92%);
   }
 
-  /* Living - purple (continuously updated) */
-  .status-living {
-    color: hsl(270, 50%, 40%);
-    background: hsl(270, 45%, 93%);
+  /* Abandoned - muted gray */
+  .status-abandoned {
+    color: var(--color-text-muted);
+    background: var(--color-bg-alt);
   }
 </style>

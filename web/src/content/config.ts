@@ -10,9 +10,11 @@ type OEPEntry = {
   id: string;
   oep: number;
   title: string;
-  author: string;
-  status: 'draft' | 'review' | 'accepted' | 'withdrawn' | 'living';
-  type: 'process' | 'technical' | 'informational';
+  type: 'technical' | 'process' | 'informational';
+  authors: string;
+  status: 'ideation' | 'discussion' | 'accepted' | 'living' | 'abandoned';
+  labels: string[];
+  discussion?: string;
   created: Date;
   body: string;
 };
@@ -26,12 +28,12 @@ function parseFrontmatter(str: string): Record<string, any> {
     const match = line.match(/^(\w+):\s*(.*)$/);
     if (match) {
       const [, key, value] = match;
-      // Handle arrays (simple case)
-      if (value.startsWith('[') && value.endsWith(']')) {
+      // Handle labels as comma-separated list
+      if (key === 'labels') {
         result[key] = value
-          .slice(1, -1)
           .split(',')
-          .map((s) => s.trim().replace(/^['"]|['"]$/g, ''));
+          .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
+          .filter((s) => s.length > 0);
       } else {
         result[key] = value.replace(/^['"]|['"]$/g, '');
       }
@@ -57,14 +59,38 @@ function parseMarkdownToEntry(content: string, filename: string): OEPEntry | nul
     ? parseInt(frontmatter.oep, 10)
     : parseInt(filename.match(/oep-(\d+)/i)?.[1] || '0', 10);
 
+  // Validate required fields
+  const requiredFields = ['title', 'type', 'status', 'authors', 'created'];
+  const missingFields = requiredFields.filter(f => !frontmatter[f]);
+  if (missingFields.length > 0) {
+    console.error(`[OEP ${filename}] Missing required fields: ${missingFields.join(', ')}`);
+    return null;
+  }
+
+  // Validate type
+  const validTypes = ['technical', 'process', 'informational'];
+  if (!validTypes.includes(frontmatter.type)) {
+    console.error(`[OEP ${filename}] Invalid type "${frontmatter.type}"`);
+    return null;
+  }
+
+  // Validate status
+  const validStatuses = ['ideation', 'discussion', 'accepted', 'living', 'abandoned'];
+  if (!validStatuses.includes(frontmatter.status)) {
+    console.error(`[OEP ${filename}] Invalid status "${frontmatter.status}"`);
+    return null;
+  }
+
   return {
     id: `oep-${String(oepNumber).padStart(4, '0')}`,
     oep: oepNumber,
-    title: frontmatter.title ?? `OEP-${oepNumber}`,
-    author: frontmatter.author ?? 'Unknown',
-    status: frontmatter.status ?? 'draft',
-    type: frontmatter.type ?? 'technical',
-    created: frontmatter.created ? new Date(frontmatter.created) : new Date(),
+    title: frontmatter.title,
+    type: frontmatter.type,
+    authors: frontmatter.authors,
+    status: frontmatter.status,
+    labels: frontmatter.labels ?? [],
+    discussion: frontmatter.discussion,
+    created: new Date(frontmatter.created),
     body: body.trim(),
   };
 }
@@ -108,9 +134,11 @@ export const collections = {
     schema: z.object({
       oep: z.number(),
       title: z.string(),
-      author: z.string(),
-      status: z.enum(['draft', 'review', 'accepted', 'withdrawn', 'living']),
-      type: z.enum(['process', 'technical', 'informational']),
+      type: z.enum(['technical', 'process', 'informational']),
+      authors: z.string(),
+      status: z.enum(['ideation', 'discussion', 'accepted', 'living', 'abandoned']),
+      labels: z.array(z.string()),
+      discussion: z.string().optional(),
       created: z.date(),
       body: z.string(),
     }),

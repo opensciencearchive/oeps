@@ -24,11 +24,13 @@ const { oep } = Astro.props;
   <OEPArticle
     oep={oep.data.oep}
     title={oep.data.title}
-    status={oep.data.status}
     type={oep.data.type}
-    author={oep.data.author}
+    status={oep.data.status}
+    labels={oep.data.labels}
+    authors={oep.data.authors}
     created={oep.data.created}
     body={oep.data.body}
+    discussion={oep.data.discussion}
   />
   <Footer />
 </Layout>

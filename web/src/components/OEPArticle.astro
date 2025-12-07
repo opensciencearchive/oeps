@@ -5,11 +5,13 @@ import { marked } from 'marked';
 interface Props {
   oep: number;
   title: string;
-  status: 'draft' | 'review' | 'accepted' | 'withdrawn' | 'living';
-  type: string;
-  author: string;
+  type: 'technical' | 'process' | 'informational';
+  status: 'ideation' | 'discussion' | 'accepted' | 'living' | 'abandoned';
+  labels: string[];
+  authors: string;
   created: Date;
   body: string;
+  discussion?: string;
   /** Optional banner for preview mode */
   previewBanner?: {
     prNumber: number;
@@ -18,7 +20,7 @@ interface Props {
   };
 }
 
-const { oep, title, status, type, author, created, body, previewBanner } = Astro.props;
+const { oep, title, type, status, labels, authors, created, body, discussion, previewBanner } = Astro.props;
 
 // Helper to generate slug from heading text
 function slugify(text: string): string {
@@ -60,7 +62,7 @@ while ((match = headingRegex.exec(body || '')) !== null) {
 }
 
 // Split authors on comma and trim whitespace
-const authors = author.split(',').map((a: string) => a.trim());
+const authorsList = authors.split(',').map((a: string) => a.trim());
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('en-US', {
@@ -69,6 +71,9 @@ function formatDate(date: Date): string {
     day: 'numeric',
   });
 }
+
+// Determine the discussion URL (from props or previewBanner)
+const discussionUrl = discussion || previewBanner?.prUrl;
 ---
 
 <div class="page-container">
@@ -83,26 +88,36 @@ function formatDate(date: Date): string {
       <dl class="article-details">
         <div class="detail-row">
           <dt>Type</dt>
-          <dd>{type}</dd>
+          <dd><span class="type-badge">{type}</span></dd>
         </div>
+        {labels.length > 0 && (
+          <div class="detail-row">
+            <dt>Labels</dt>
+            <dd class="labels-list">
+              {labels.map((label) => (
+                <span class="label-tag">{label}</span>
+              ))}
+            </dd>
+          </div>
+        )}
         <div class="detail-row">
           <dt>Created</dt>
           <dd>{formatDate(created)}</dd>
         </div>
         <div class="detail-row detail-row-authors">
-          <dt>{authors.length > 1 ? 'Authors' : 'Author'}</dt>
+          <dt>{authorsList.length > 1 ? 'Authors' : 'Author'}</dt>
           <dd class="authors-list">
-            {authors.map((a) => (
+            {authorsList.map((a) => (
               <span class="author-entry">{a}</span>
             ))}
           </dd>
         </div>
       </dl>
 
-      {previewBanner && (
+      {(previewBanner || (status === 'ideation' || status === 'discussion')) && discussionUrl && (
         <div class="discussion-cta">
           <p class="discussion-text">This proposal is open for feedback.</p>
-          <a href={previewBanner.prUrl} class="discussion-btn" target="_blank" rel="noopener">Join the discussion on GitHub →</a>
+          <a href={discussionUrl} class="discussion-btn" target="_blank" rel="noopener">Join the discussion on GitHub →</a>
         </div>
       )}
     </header>
@@ -262,6 +277,37 @@ function formatDate(date: Date): string {
     margin: 0;
     font-size: var(--text-base);
     color: var(--color-text);
+  }
+
+  .labels-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .label-tag {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: lowercase;
+    padding: var(--space-1) var(--space-2);
+    background: var(--color-bg-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+  }
+
+  .type-badge {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: lowercase;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    /* Neutral gray styling - same as labels */
+    color: var(--color-text-muted);
+    background: var(--color-bg-alt);
+    border: 1px solid var(--color-border);
   }
 
   .authors-list {

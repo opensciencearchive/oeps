@@ -16,14 +16,25 @@ const octokit = new Octokit({
 });
 
 // Parse frontmatter from OEP markdown content
-function parseFrontmatter(content: string): Record<string, string> {
+function parseFrontmatter(content: string): Record<string, any> {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return {};
 
-  const result: Record<string, string> = {};
+  const result: Record<string, any> = {};
   for (const line of match[1].split('\n')) {
     const m = line.match(/^(\w+):\s*(.*)$/);
-    if (m) result[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+    if (m) {
+      const [, key, value] = m;
+      // Handle labels as comma-separated list
+      if (key === 'labels') {
+        result[key] = value
+          .split(',')
+          .map((s: string) => s.trim().replace(/^['"]|['"]$/g, ''))
+          .filter((s: string) => s.length > 0);
+      } else {
+        result[key] = value.replace(/^['"]|['"]$/g, '');
+      }
+    }
   }
   return result;
 }
@@ -31,11 +42,13 @@ function parseFrontmatter(content: string): Record<string, string> {
 let oepData: {
   oep: number;
   title: string;
-  status: 'draft' | 'review' | 'accepted' | 'withdrawn' | 'living';
-  type: string;
-  author: string;
+  type: 'technical' | 'process' | 'informational';
+  status: 'ideation' | 'discussion' | 'accepted' | 'living' | 'abandoned';
+  labels: string[];
+  authors: string;
   created: Date;
   body: string;
+  discussion?: string;
 } | null = null;
 
 let prMeta: {
@@ -83,19 +96,46 @@ try {
       const rawContent = Buffer.from(fileContent.content, 'base64').toString('utf-8');
       const frontmatter = parseFrontmatter(rawContent);
 
-      // Remove frontmatter and get body
-      const bodyMatch = rawContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
-      const body = bodyMatch ? bodyMatch[1] : rawContent;
+      // Validate required fields
+      const missingFields: string[] = [];
+      if (!frontmatter.oep) missingFields.push('oep');
+      if (!frontmatter.title) missingFields.push('title');
+      if (!frontmatter.type) missingFields.push('type');
+      if (!frontmatter.status) missingFields.push('status');
+      if (!frontmatter.authors) missingFields.push('authors');
+      if (!frontmatter.created) missingFields.push('created');
 
-      oepData = {
-        oep: parseInt(frontmatter.oep || '0', 10),
-        title: frontmatter.title || prInfo.title,
-        status: 'review',
-        type: frontmatter.type || 'technical',
-        author: frontmatter.author || prInfo.user?.login || 'unknown',
-        created: frontmatter.created ? new Date(frontmatter.created) : new Date(),
-        body,
-      };
+      if (missingFields.length > 0) {
+        error = `Missing required frontmatter fields: ${missingFields.join(', ')}`;
+      } else {
+        // Validate type
+        const validTypes = ['technical', 'process', 'informational'];
+        if (!validTypes.includes(frontmatter.type)) {
+          error = `Invalid type "${frontmatter.type}". Must be one of: ${validTypes.join(', ')}`;
+        } else {
+          // Validate status
+          const validStatuses = ['ideation', 'discussion', 'accepted', 'living', 'abandoned'];
+          if (!validStatuses.includes(frontmatter.status)) {
+            error = `Invalid status "${frontmatter.status}". Must be one of: ${validStatuses.join(', ')}`;
+          } else {
+            // Remove frontmatter and get body
+            const bodyMatch = rawContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
+            const body = bodyMatch ? bodyMatch[1] : rawContent;
+
+            oepData = {
+              oep: parseInt(frontmatter.oep, 10),
+              title: frontmatter.title,
+              type: frontmatter.type as 'technical' | 'process' | 'informational',
+              status: frontmatter.status as 'ideation' | 'discussion' | 'accepted' | 'living' | 'abandoned',
+              labels: frontmatter.labels ?? [],
+              authors: frontmatter.authors,
+              created: new Date(frontmatter.created),
+              body,
+              discussion: frontmatter.discussion,
+            };
+          }
+        }
+      }
     }
   } else {
     error = 'No OEP file found in this pull request.';
@@ -124,11 +164,13 @@ Astro.response.headers.set('Cache-Control', 's-maxage=60, stale-while-revalidate
     <OEPArticle
       oep={oepData.oep}
       title={oepData.title}
-      status={oepData.status}
       type={oepData.type}
-      author={oepData.author}
+      status={oepData.status}
+      labels={oepData.labels}
+      authors={oepData.authors}
       created={oepData.created}
       body={oepData.body}
+      discussion={oepData.discussion}
       previewBanner={{
         prNumber,
         prUrl: prMeta.html_url,

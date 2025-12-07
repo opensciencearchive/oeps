@@ -28,10 +28,11 @@ Alternatively, copy `template.md` manually and fill in the frontmatter:
 ---
 oep: XXXX
 title: Your Proposal Title
-status: draft
 type: technical | process | informational
-author: Your Name <email@example.com>
+status: ideation | discussion | accepted | living | abandoned
+authors: Your Name <email@example.com>
 created: YYYY-MM-DD
+labels:
 ---
 ```
 
