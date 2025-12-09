@@ -74,6 +74,10 @@ function formatDate(date: Date): string {
 
 // Determine the discussion URL (from props or previewBanner)
 const discussionUrl = discussion || previewBanner?.prUrl;
+
+// GitHub source URL
+const oepFilename = `OEP-${String(oep).padStart(4, '0')}.md`;
+const githubSourceUrl = `https://github.com/opensciencearchive/oeps/blob/main/oeps/${oepFilename}`;
 ---
 
 <div class="page-container">
@@ -112,6 +116,12 @@ const discussionUrl = discussion || previewBanner?.prUrl;
             ))}
           </dd>
         </div>
+        {!previewBanner && (
+          <div class="detail-row">
+            <dt>Source</dt>
+            <dd><a href={githubSourceUrl} class="source-link" target="_blank" rel="noopener">View on GitHub →</a></dd>
+          </div>
+        )}
       </dl>
 
       {(previewBanner || (status === 'ideation' || status === 'discussion')) && discussionUrl && (
@@ -314,6 +324,17 @@ const discussionUrl = discussion || previewBanner?.prUrl;
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+  }
+
+  .source-link {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .source-link:hover {
+    color: var(--color-text);
   }
 
   /* Content grid - single column on mobile */
