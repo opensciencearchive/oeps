@@ -1,6 +1,6 @@
 ---
-// Prerender at build time (SSG)
-export const prerender = true;
+// SSR - fetch PRs on each request
+export const prerender = false;
 
 import { getCollection } from 'astro:content';
 import { Octokit } from '@octokit/rest';
@@ -152,6 +152,8 @@ try {
 const ideationPRs = openPRs.filter((pr) => pr.status === 'ideation');
 const discussionPRs = openPRs.filter((pr) => pr.status === 'discussion');
 
+// Cache for 30 seconds, serve stale while revalidating for 60 seconds
+Astro.response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
 ---
 
 <Layout title="OEPs — OSA Enhancement Proposals">
