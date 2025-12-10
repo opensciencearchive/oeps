@@ -4,6 +4,7 @@ export const prerender = false;
 
 import { getCollection } from 'astro:content';
 import { Octokit } from '@octokit/rest';
+import { Icon } from 'astro-icon/components';
 import Layout from '../layouts/Layout.astro';
 import Footer from '../components/Footer.astro';
 
@@ -158,6 +159,9 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-re
 
 <Layout title="OEPs — OSA Enhancement Proposals">
   <main class="main">
+    <div class="hero-watermark">
+      <Icon name="lucide:git-merge" />
+    </div>
     <!-- Hero Header -->
     <header class="hero">
       <h1 class="hero-title">
@@ -321,13 +325,36 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-re
     margin: 0 auto;
     padding: 0 var(--space-6) var(--space-20);
     box-sizing: border-box;
+    position: relative;
+  }
+
+  .hero-watermark {
+    position: absolute;
+    left: -12.5%;
+    top: 20%;
+    /* transform: rotate(180deg); */
+    /* transform: translateY(-70%) rotate(0deg); */
+    width: clamp(270px, 36vw, 450px);
+    height: clamp(270px, 36vw, 450px);
+    color: var(--color-text);
+    opacity: 0.03;
+    pointer-events: none;
+  }
+
+  .hero-watermark svg {
+    width: 100%;
+    height: 100%;
+    stroke-width: 0.5;
   }
 
   /* Hero Header */
   .hero {
+    position: relative;
     padding: var(--space-40) 0 var(--space-40);
     max-width: 500px;
-    margin-left: var(--space-32);
+    margin-left: auto;
+    margin-right: var(--space-32);
+    text-align: right;
   }
 
   .hero-title {
@@ -341,7 +368,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-re
 
   .hero-eyebrow {
     font-family: var(--font-display);
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
     font-weight: 400;
     letter-spacing: -0.01em;
     color: var(--color-text-muted);
@@ -362,6 +389,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-re
     color: var(--color-text-muted);
     margin-bottom: var(--space-8);
     max-width: 420px;
+    margin-left: auto;
   }
 
   .hero-subtitle a {
@@ -377,14 +405,19 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-re
   }
 
   .hero-cta {
-    font-size: var(--text-sm);
-    color: var(--color-text-muted);
+    display: inline-block;
+    font-size: var(--text-base);
+    font-weight: 500;
+    color: var(--color-text);
     text-decoration: none;
-    transition: color var(--transition-fast);
+    padding-bottom: var(--space-2);
+    border-bottom: 2px solid var(--color-text);
+    transition: all var(--transition-fast);
   }
 
   .hero-cta:hover {
-    color: var(--color-text);
+    color: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
   }
 
   /* Proposals - now primary content */
@@ -428,9 +461,27 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-re
     gap: var(--space-2);
   }
 
+  @media (max-width: 1500px) {
+    .hero-watermark {
+      left: 0%;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .hero-watermark {
+      display: none;
+    }
+  }
+
   @media (max-width: 640px) {
     .hero {
       padding: var(--space-16) 0 var(--space-8);
+      margin-left: 0;
+      margin-right: 0;
+      text-align: left;
+    }
+
+    .hero-subtitle {
       margin-left: 0;
     }
 
