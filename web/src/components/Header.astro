@@ -9,7 +9,7 @@ const { minimal = false } = Astro.props;
 <header class:list={['header', { minimal }]}>
   <div class="header-inner">
     <a href="/" class="logo">
-      <span class="logo-text">OSA OEPs</span>
+      <img src="/osa_logo.svg" alt="OSA" class="logo-img" />
     </a>
     {!minimal && (
       <nav class="nav">
@@ -38,8 +38,16 @@ const { minimal = false } = Astro.props;
   }
 
   .logo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     text-decoration: none;
     color: var(--color-text);
+  }
+
+  .logo-img {
+    height: 50px;
+    width: auto;
   }
 
   .logo-text {

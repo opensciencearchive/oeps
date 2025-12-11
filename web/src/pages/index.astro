@@ -330,7 +330,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-re
 
   .hero-watermark {
     position: absolute;
-    left: -12.5%;
+    left: 0%;
     top: 20%;
     /* transform: rotate(180deg); */
     /* transform: translateY(-70%) rotate(0deg); */
@@ -461,11 +461,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-re
     gap: var(--space-2);
   }
 
-  @media (max-width: 1500px) {
-    .hero-watermark {
-      left: 0%;
-    }
-  }
 
   @media (max-width: 900px) {
     .hero-watermark {
