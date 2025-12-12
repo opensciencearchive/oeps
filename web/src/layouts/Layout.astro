@@ -19,6 +19,16 @@ const { title, description = 'OSA Enhancement Proposals — the legislative hub 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
+
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-L5FQSDD01P"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-L5FQSDD01P');
+    </script>
+
   </head>
   <body>
     <slot />
